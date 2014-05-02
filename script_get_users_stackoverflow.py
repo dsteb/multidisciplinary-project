@@ -31,15 +31,25 @@ Structure of the parse text:
 
 """
 
+# aaaakbbbb
+
+def parse(text, part1, part2):
+	li = re.split(part1, text)
+	another = re.split(part2, li[1])
+	return another[0]
+
 # Main Function
 
 def searchUsername(username):
 	text = getPageSourceCode(generateURL('slurm'))
 	lis = re.split('<a href="/users/(\d+)/(\D+)"><div>',text)
-
 	final_list = []
 	for i in range(1, len(lis), 3):
-		final_list.append ({'user':lis[i+1], 'id':lis[i]})
+		# ll = re.split('total reputation: (/d+)',lis[i+2])
+		#print lis[i+2]
+		total_score = re.search('total reputation: (\d+)', lis[i+2]).group(1)
+		final_list.append ({'user':lis[i+1], 'id':lis[i], 'total_score': total_score})
+		#print ll[1]
 
 	return final_list
 
