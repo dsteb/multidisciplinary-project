@@ -3,8 +3,8 @@
 	Program Developed for the course: MultiDisciplinary Project
 
 	The program get as a argument a String that corresponds to the username that 
-	we want to looking for into StackOverflow. As a result we have a list formed
-	by a tuple {user, id, total_score} which matched with the given String.
+	we want to looking for into GitHub. As a result we have a list formed
+	by a tuple {name, url} which matched with the given String.
 
 	@author: Ferran B.
 """
@@ -15,35 +15,23 @@ import json
 
 # Auxiliar functions
 
+GITHUB_URL = 'https://github.com/'
+
 def generateURL(username):
-    return 'http://stackoverflow.com/users?tab=reputation/users/filter&search=' + username + '&filter=week&tab=reputation'
+    return 'https://github.com/search?q=' + username + '&ref=cmdform&type=Users'
 
 def getPageSourceCode(page):
     response = urllib2.urlopen(page)
     return response.read()
 
-"""
-
-Structure of the parse text:
-
-# 1. user_id_1 		2. user_name_1
-
-# 4. user_id_2 		5. user_name_2
-
-"""
-# Main Function
-
 def searchUser(username):
     text = getPageSourceCode(generateURL(username))
-    matches = re.finditer('<a href="/users/(\d+)/(\D+)">\D*</a>', text)
+    matches = re.findall('<a href="/(\D+)" class="gravatar">', text)
     final_list = []
     for match in matches:
-        subtext = text[match.start():]
-        total_score = re.search('total reputation: (\d+)', subtext).group(1)
         final_list.append({
-            'user': match.group(2), 
-            'id': match.group(1),
-            'total_score': total_score
+            'user': match,
+            'url': GITHUB_URL + match
         })
     return final_list
 
