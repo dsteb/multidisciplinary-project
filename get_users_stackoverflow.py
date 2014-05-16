@@ -9,15 +9,19 @@
 	@author: Ferran B.
 """
 
+import urllib
 import urllib2
 import re
 import json
 import sys
+import calendar
+from datetime import datetime
 from bs4 import BeautifulSoup
 
 # Auxiliar functions
 
 def generateURL(username):
+    username = urllib.quote(username)
     return 'http://stackoverflow.com/users?tab=reputation/users/filter&search=' + username + '&filter=week&tab=reputation'
 
 def getPageSourceCode(page):
@@ -35,22 +39,27 @@ Structure of the parse text:
 """
 # Main Function
 
-def searchUser(username):
+def searchUser(username, id=None):
     text = getPageSourceCode(generateURL(username))
-    matches = re.finditer('<a href="/users/(\d+)/(\D+)">\D*</a>', text)
+    text = BeautifulSoup(text)
+    divs = text.find_all('div', {'class': 'user-details'})
     final_list = []
-    for match in matches:
-        subtext = text[match.start():]
-        total_score = re.search('total reputation: (\d+)', subtext).group(1)
+    for div in divs:
+        a = div.find('a')
+        username = a.contents[0]
+        found_id = a['href'].split('/')[2]
+        total_score = div.find('span', {'class': 'reputation-score'}).contents[0]
+#    matches = re.finditer('<a href="/users/(\d+)/(\.+)">.*</a>', text)
         final_list.append({
-            'user': match.group(2), 
-            'id': match.group(1),
+            'user': username, 
+            'id': found_id,
             'total_score': total_score
         })
     return final_list
 
 def get_answers_page(user, number):
-    return 'http://stackoverflow.com/users/{}/{}?tab=answers&page={}'.format(user['id'], user['user'], number)
+    username = urllib.quote(user['user'])
+    return 'http://stackoverflow.com/users/{0}/{1}?tab=answers&page={2}'.format(user['id'], username, number)
 
 def parse_answer_url(url):
     HTTP_STACKOVERFLOW = 'http://stackoverflow.com'
@@ -64,22 +73,42 @@ def parse_answer_url(url):
         url = url[len(rem) + 1:]
         url = HTTP_STACKOVERFLOW + url[:-1]
         urls.append(url)
-        parse_question_score(url)
+        print json.dumps(parse_question_score(url), indent=4)
     return urls
 
 def parse_question_score(url):
+    DATE_2000 = 946684800
     text = getPageSourceCode(url)
     soup = BeautifulSoup(text)
-    votes = soup.find_all('span', {'class', 'vote-count-post'})
+    votes = soup.find_all('span', {'class': 'vote-count-post'})
+    td_owner = soup.find('td', {'class': 'owner'})
+    details = td_owner.find('div', {'class', 'user-details'})
+    time = td_owner.find('div', {'class', 'user-action-time'}).span['title']
+    dt = datetime.strptime(time, '%Y-%m-%d %H:%M:%SZ')
+    ut = (calendar.timegm(dt.utctimetuple()) - DATE_2000) / 3600 / 24
+    
+    print ut, time
+    splits = details.a['href'].split('/')
+    id = int(splits[-2])
+    questioner = searchUser(details.a.contents[0], id)[0]
     if len(votes) < 2:
         return {'question': 0, 'answer': 0}
-    print int(votes[0].contents[0]), int(votes[1].contents[0])
+    return {
+        'question_score': int(votes[0].contents[0]),
+        'questioner_reputation': questioner['total_score'],
+        'answer_score': int(votes[1].contents[0])
+    }	
 
 if __name__ == '__main__':
     username = sys.argv[1]
     json_data = searchUser(username)
     user = json_data[0]
-    answer_url = get_answers_page(user, 1)
-    parse_answer_url(answer_url)
+    i = 1
+    while True:
+        answer_url = get_answers_page(user, i)
+        urls = parse_answer_url(answer_url)
+        i = i + 1
+        if len(urls) == 0:
+            break;
     # use dumps for pretty printing    
-    print json.dumps(json_data, indent=4)
+    # print json.dumps(json_data, indent=4)
