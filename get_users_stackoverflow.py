@@ -12,6 +12,8 @@
 import urllib2
 import re
 import json
+import sys
+from bs4 import BeautifulSoup
 
 # Auxiliar functions
 
@@ -47,8 +49,37 @@ def searchUser(username):
         })
     return final_list
 
+def get_answers_page(user, number):
+    return 'http://stackoverflow.com/users/{}/{}?tab=answers&page={}'.format(user['id'], user['user'], number)
+
+def parse_answer_url(url):
+    HTTP_STACKOVERFLOW = 'http://stackoverflow.com'
+    text = getPageSourceCode(url)
+    soup = BeautifulSoup(text)
+    accepted = soup.find_all('div', {'class': 'answered-accepted'})
+    urls = []
+    for div in accepted:
+        rem = 'window.location.href='
+        url = div['onclick']
+        url = url[len(rem) + 1:]
+        url = HTTP_STACKOVERFLOW + url[:-1]
+        urls.append(url)
+        parse_question_score(url)
+    return urls
+
+def parse_question_score(url):
+    text = getPageSourceCode(url)
+    soup = BeautifulSoup(text)
+    votes = soup.find_all('span', {'class', 'vote-count-post'})
+    if len(votes) < 2:
+        return {'question': 0, 'answer': 0}
+    print int(votes[0].contents[0]), int(votes[1].contents[0])
+
 if __name__ == '__main__':
-    username = 'slurm'
+    username = sys.argv[1]
     json_data = searchUser(username)
+    user = json_data[0]
+    answer_url = get_answers_page(user, 1)
+    parse_answer_url(answer_url)
     # use dumps for pretty printing    
     print json.dumps(json_data, indent=4)
