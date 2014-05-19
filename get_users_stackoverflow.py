@@ -22,7 +22,7 @@ from bs4 import BeautifulSoup
 
 def generateURL(username):
     username = urllib.quote(username)
-    return 'http://stackoverflow.com/users?tab=reputation/users/filter&search=' + username + '&filter=week&tab=reputation'
+    return 'http://stackoverflow.com/users?tab=reputation/users/filter&search=' + username + '&filter=all&tab=reputation'
 
 def getPageSourceCode(page):
     response = urllib2.urlopen(page)
@@ -48,7 +48,12 @@ def searchUser(username, id=None):
         a = div.find('a')
         username = a.contents[0]
         found_id = a['href'].split('/')[2]
-        total_score = div.find('span', {'class': 'reputation-score'}).contents[0]
+        span = div.find('span', {'class': 'reputation-score'})
+        del_string = 'reputation score '
+        total_score = span['title'][len(del_string):]
+        if total_score == '':
+            total_score = span.contents[0].replace(',', '')
+
 #    matches = re.finditer('<a href="/users/(\d+)/(\.+)">.*</a>', text)
         final_list.append({
             'user': username, 
@@ -107,8 +112,12 @@ if __name__ == '__main__':
     username = sys.argv[1]
     json_data = searchUser(username)
     user = json_data[0]
+    print json_data
     i = 1
-    result = []
+    result = {}
+    result['answerer'] = json_data
+    questions = []
+    result['questions'] = questions
     f = open('test', 'w')
     f.write(json.dumps(json_data, indent=4))
     f.close()
@@ -118,7 +127,7 @@ if __name__ == '__main__':
         for url in urls:
             parsed_question = parse_question_score(url)
             print json.dumps(parsed_question, indent=4)
-            result.append(parsed_question)
+            questions.append(parsed_question)
         i = i + 1
         if len(urls) == 0:
             break
