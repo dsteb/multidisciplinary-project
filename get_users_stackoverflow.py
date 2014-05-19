@@ -53,7 +53,7 @@ def searchUser(username, id=None):
         final_list.append({
             'user': username, 
             'id': found_id,
-            'total_score': total_score
+            'total_score': int(total_score)
         })
     return final_list
 
@@ -73,30 +73,34 @@ def parse_answer_url(url):
         url = url[len(rem) + 1:]
         url = HTTP_STACKOVERFLOW + url[:-1]
         urls.append(url)
-        print json.dumps(parse_question_score(url), indent=4)
     return urls
 
 def parse_question_score(url):
     DATE_2000 = 946684800
+    EMPTY = {'question': 0, 'answer': 0}
     text = getPageSourceCode(url)
     soup = BeautifulSoup(text)
     votes = soup.find_all('span', {'class': 'vote-count-post'})
     td_owner = soup.find('td', {'class': 'owner'})
+    if td_owner is None:
+        return EMPTY
     details = td_owner.find('div', {'class', 'user-details'})
     time = td_owner.find('div', {'class', 'user-action-time'}).span['title']
     dt = datetime.strptime(time, '%Y-%m-%d %H:%M:%SZ')
     ut = (calendar.timegm(dt.utctimetuple()) - DATE_2000) / 3600 / 24
-    
-    print ut, time
+   
+    if details.a is None:
+        return EMPTY
     splits = details.a['href'].split('/')
     id = int(splits[-2])
     questioner = searchUser(details.a.contents[0], id)[0]
     if len(votes) < 2:
-        return {'question': 0, 'answer': 0}
+        return EMPTY
     return {
         'question_score': int(votes[0].contents[0]),
         'questioner_reputation': questioner['total_score'],
-        'answer_score': int(votes[1].contents[0])
+        'answer_score': int(votes[1].contents[0]),
+        'time_diff': ut 
     }	
 
 if __name__ == '__main__':
@@ -104,11 +108,22 @@ if __name__ == '__main__':
     json_data = searchUser(username)
     user = json_data[0]
     i = 1
+    result = []
+    f = open('test', 'w')
+    f.write(json.dumps(json_data, indent=4))
+    f.close()
     while True:
         answer_url = get_answers_page(user, i)
         urls = parse_answer_url(answer_url)
+        for url in urls:
+            parsed_question = parse_question_score(url)
+            print json.dumps(parsed_question, indent=4)
+            result.append(parsed_question)
         i = i + 1
         if len(urls) == 0:
-            break;
-    # use dumps for pretty printing    
-    # print json.dumps(json_data, indent=4)
+            break
+    
+    # use dumps for pretty printing
+    f = open(username + '.json', 'w')
+    f.write(json.dumps(result, indent=4))
+    f.close()
