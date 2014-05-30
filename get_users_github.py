@@ -18,6 +18,7 @@ import re
 import json
 from sets import Set
 from bs4 import BeautifulSoup
+import sys
 
 # Auxiliar functions
 
@@ -85,16 +86,16 @@ def parse_commit(url):
     toc = soup.find(id='toc')
     strong = toc.find('strong').find_next('strong')
     loc = strong.get_text().split(' ')[0]
-    loc.replace(',', '')
+    loc = loc.replace(',', '')
     loc = int(loc)
     utc = soup.find('time')['datetime']
     utc = utc[:-6] # ignore timezone
     return {'commit': url, 'utc': utc, 'loc': loc}
 
 if __name__ == '__main__':
-    username = 'n43jl'
+    username = sys.argv[1]
     result = process_user(username)
-    f = open(username, 'w')
+    f = open('github/{}.json'.format(username), 'w')
     f.write(json.dumps(result))
     f.close() 
     # use dumps for pretty printing    
