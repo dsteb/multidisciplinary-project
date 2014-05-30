@@ -34,16 +34,19 @@ def process_user(username):
     user_info = soup.find(class_='user-list-info')
     a = user_info.find('a')
     username = a['href'][1:]
-    process_days(username)    
+    commits = process_days(username)
+    return {'username': username, 'commits': commits}
 
 def process_days(username):
     url = '{}/users/{}/contributions_calendar_data'.format(GITHUB_URL, username)
     days = read_page(url)
     days = json.loads(days)
+    results = []
     for day in days:
         if day[1] != 0:
             dt = day[0].replace('/', '-')
-            parse_day(username, dt)
+            results.extend(parse_day(username, dt))
+    return results
 
 def parse_day(username, day):
     print day
@@ -51,35 +54,47 @@ def parse_day(username, day):
     text = read_page(url)
     soup = BeautifulSoup(text)
     header = soup.find(class_='conversation-list-heading')
+    results = []
     if header.get_text().find('commits') != -1:
         ul = soup.find(class_='simple-conversation-list')
         for a in ul.find_all('a'):
-            parse_repository(a['href'])
+            results.extend(parse_repository(a['href']))
+    return results
 
 CACHE = Set()
 
 def parse_repository(url):
     if url in CACHE:
-        return
-    print url
+        return []
     CACHE.add(url)
     url = GITHUB_URL + url
     text = read_page(url)
     soup = BeautifulSoup(text)
-    comits = soup.find_all(class_='gobutton')
-    for a in comits:
-        parse_comit(a['href'])
+    commits = soup.find_all(class_='gobutton')
+    results = []
+    for a in commits:
+        data = parse_commit(a['href'])
+        results.append(data)
+    return results
 
-def parse_comit(url):
+def parse_commit(url):
     print url
     url = GITHUB_URL + url
     text = read_page(url)
     soup = BeautifulSoup(text)
     toc = soup.find(id='toc')
     strong = toc.find('strong').find_next('strong')
-    print int(strong.get_text().split(' ')[0])
+    loc = strong.get_text().split(' ')[0]
+    loc.replace(',', '')
+    loc = int(loc)
+    utc = soup.find('time')['datetime']
+    utc = utc[:-6] # ignore timezone
+    return {'commit': url, 'utc': utc, 'loc': loc}
 
 if __name__ == '__main__':
-    username = 'John+Resig'
-    process_user(username)
+    username = 'n43jl'
+    result = process_user(username)
+    f = open(username, 'w')
+    f.write(json.dumps(result))
+    f.close() 
     # use dumps for pretty printing    
