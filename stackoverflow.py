@@ -13,6 +13,7 @@ import sys
 from datetime import datetime
 from bs4 import BeautifulSoup
 import threading
+import logging
 
 USE_THREADS = True
 STACKOVERFLOW_URL = 'http://stackoverflow.com'
@@ -76,8 +77,11 @@ def parse_question_score(url):
 
 lock = threading.Lock()
 def process_page(urls, questions):
+    i = 0
+    l = len(urls)
     for url in urls:
-        print '  {}'.format(url)
+        i += 1
+        logging.info('{}/{} {}'.format(i, l, url))
         parsed_question = parse_question_score(url)
         if parsed_question:
             lock.acquire()
@@ -85,35 +89,38 @@ def process_page(urls, questions):
             lock.release()
     
 def process_user(url):
-    user = user_data(url)
-    result = {}
-    result['answerer'] = user
-    result['questions'] = []
-    page = 1
-    threads = []
-    while True:
-        answer_url = '{}?tab=answers&page={}'.format(url, page)
-        urls = parse_answer_url(answer_url)
-        if len(urls) > 0:
-            if USE_THREADS:
-                print "Thread {} started for page {}".format(len(threads), page)
-                t = threading.Thread(target=process_page, args=(urls, result['questions']))
-                t.start()
-                threads.append(t)
+    try: 
+        user = user_data(url)
+        result = {}
+        result['answerer'] = user
+        result['questions'] = []
+        page = 1
+        threads = []
+        while True:
+            answer_url = '{}?tab=answers&page={}'.format(url, page)
+            urls = parse_answer_url(answer_url)
+            if len(urls) > 0:
+                if USE_THREADS:
+                    logging.debug("Thread {} started for page {}".format(len(threads), page))
+                    t = threading.Thread(target=process_page, args=(urls, result['questions']))
+                    t.start()
+                    threads.append(t)
+                else:
+                    process_page(urls, result['questions'])
             else:
-                process_page(urls, result['questions'])
-        else:
-            break
-        page += 1
-     
-    for t in threads:
-        t.join()
-    # use dumps for pretty printing
-    username = url.split('/')[-1]
-    f = open('stackoverflow/{}.json'.format(username), 'w')
-    f.write(json.dumps(result, indent=4))
-    f.close()
+                break
+            page += 1
+         
+        for t in threads:
+            t.join()
+        # use dumps for pretty printing
+        username = url.split('/')[-1]
+        f = open('stackoverflow/{}.json'.format(username), 'w')
+        f.write(json.dumps(result, indent=4))
+        f.close()
+    except Exception as e:
+        logging.error(e)
 
 
-if __name__ == '__main__':
-    process_user(sys.argv[1])
+# if __name__ == '__main__':
+#     process_user(sys.argv[1])
