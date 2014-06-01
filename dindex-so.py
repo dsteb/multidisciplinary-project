@@ -2,8 +2,11 @@
 
 import sys
 import json
+import calendar
+from datetime import datetime
 
 def main():
+    DATE_2000 = 946684800
     percent = 7.5
     filename = sys.argv[1]
     f = open(filename, 'r')
@@ -14,9 +17,12 @@ def main():
     norm = 0
     num = 0
     questions = json_data['questions']
-    questions = sorted(questions, key=lambda question: question['time_diff'])
+    questions = sorted(questions, key=lambda question: question['datetime'])
     for question in questions:
-        t = question["time_diff"]
+        if not question['datetime']:
+            continue
+        dt = datetime.strptime(question["datetime"], '%Y-%m-%dT%H:%M:%S')
+        t = (calendar.timegm(dt.utctimetuple()) - DATE_2000) / 3600 / 24
         qr = question["questioner_reputation"]
         qs = question["question_score"]
         as0 = question["answer_score"]

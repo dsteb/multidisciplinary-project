@@ -17,14 +17,11 @@ import sys
 import calendar
 from datetime import datetime
 from bs4 import BeautifulSoup
+import threading
 
 # Auxiliar functions
 
-def generateURL(username):
-    username = urllib.quote(username)
-    return 'http://stackoverflow.com/users?tab=reputation/users/filter&search=' + username + '&filter=all&tab=reputation'
-
-def getPageSourceCode(page):
+def read_page(page):
     response = urllib2.urlopen(page)
     return response.read()
 
@@ -39,28 +36,36 @@ Structure of the parse text:
 """
 # Main Function
 
-def searchUser(username, id=None):
-    text = getPageSourceCode(generateURL(username))
+def user_data(username, id=None):
+    username = urllib.quote(username)
+    url = 'http://stackoverflow.com/users?tab=reputation/users/filter&search={}&filter=all&tab=reputation'.format(username)
+    text = read_page(url)
     text = BeautifulSoup(text)
     divs = text.find_all('div', {'class': 'user-details'})
-    final_list = []
+    user_data = None
     for div in divs:
         a = div.find('a')
         username = a.contents[0]
-        found_id = a['href'].split('/')[2]
+        found_id = int(a['href'].split('/')[2])
         span = div.find('span', {'class': 'reputation-score'})
         del_string = 'reputation score '
         total_score = span['title'][len(del_string):]
         if total_score == '':
             total_score = span.contents[0].replace(',', '')
-
-#    matches = re.finditer('<a href="/users/(\d+)/(\.+)">.*</a>', text)
-        final_list.append({
-            'user': username, 
-            'id': found_id,
-            'total_score': int(total_score)
-        })
-    return final_list
+        if id is not None:
+            if id == found_id:
+                return {
+                    'user': username,
+                    'id': found_id,
+                    'total_score': int(total_score)
+                }   
+        else:            
+            return {
+                'user': username, 
+                'id': found_id,
+                'total_score': int(total_score)
+            }
+    return None
 
 def get_answers_page(user, number):
     username = urllib.quote(user['user'])
@@ -68,7 +73,7 @@ def get_answers_page(user, number):
 
 def parse_answer_url(url):
     HTTP_STACKOVERFLOW = 'http://stackoverflow.com'
-    text = getPageSourceCode(url)
+    text = read_page(url)
     soup = BeautifulSoup(text)
     accepted = soup.find_all('div', {'class': 'answered-accepted'})
     urls = []
@@ -81,9 +86,8 @@ def parse_answer_url(url):
     return urls
 
 def parse_question_score(url):
-    DATE_2000 = 946684800
-    EMPTY = {'question': 0, 'answer': 0}
-    text = getPageSourceCode(url)
+    EMPTY = {'question_score': 0, 'answer_score': 0, 'datetime': '', 'questioner_reputation': 0}
+    text = read_page(url)
     soup = BeautifulSoup(text)
     votes = soup.find_all('span', {'class': 'vote-count-post'})
     td_owner = soup.find('td', {'class': 'owner'})
@@ -92,47 +96,58 @@ def parse_question_score(url):
     details = td_owner.find('div', {'class', 'user-details'})
     time = td_owner.find('div', {'class', 'user-action-time'}).span['title']
     dt = datetime.strptime(time, '%Y-%m-%d %H:%M:%SZ')
-    ut = (calendar.timegm(dt.utctimetuple()) - DATE_2000) / 3600 / 24
    
     if details.a is None:
         return EMPTY
     splits = details.a['href'].split('/')
     id = int(splits[-2])
-    questioner = searchUser(details.a.contents[0], id)[0]
-    if len(votes) < 2:
+    questioner = user_data(details.a.contents[0], id)
+    if len(votes) < 2 or questioner is None:
         return EMPTY
     return {
+        'questioner_id': id,
         'question_score': int(votes[0].contents[0]),
         'questioner_reputation': questioner['total_score'],
         'answer_score': int(votes[1].contents[0]),
-        'time_diff': ut 
+        'datetime': dt.strftime('%Y-%m-%dT%H:%M:%S')
     }	
 
-if __name__ == '__main__':
-    username = sys.argv[1]
-    json_data = searchUser(username)
-    user = json_data[0]
-    print json_data
-    i = 1
-    result = {}
-    result['answerer'] = json_data
-    questions = []
-    result['questions'] = questions
-    f = open('test', 'w')
-    f.write(json.dumps(json_data, indent=4))
-    f.close()
-    while True:
-        answer_url = get_answers_page(user, i)
-        urls = parse_answer_url(answer_url)
-        for url in urls:
-            parsed_question = parse_question_score(url)
-            print json.dumps(parsed_question, indent=4)
-            questions.append(parsed_question)
-        i = i + 1
-        if len(urls) == 0:
-            break
+
+lock = threading.Lock()
+def process_page(urls, questions):
+    for url in urls:
+        print '  {}'.format(url)
+        parsed_question = parse_question_score(url)
+        lock.acquire()
+        questions.append(parsed_question)
+        lock.release()
     
+def process_user(username):
+    user = user_data(username)
+    result = {}
+    result['answerer'] = user
+    result['questions'] = []
+    page = 1
+    threads = []
+    while True:
+        answer_url = get_answers_page(user, page)
+        urls = parse_answer_url(answer_url)
+        if len(urls) > 0:
+            print "Thread {} started for page {}".format(len(threads), page)
+            t = threading.Thread(target=process_page, args=(urls, result['questions']))
+            t.start()
+            threads.append(t)
+        else:
+            break
+        page += 1
+     
+    for t in threads:
+        t.join()
     # use dumps for pretty printing
-    f = open(username + '.json', 'w')
+    f = open('stackoverflow/{}.json'.format(username), 'w')
     f.write(json.dumps(result, indent=4))
     f.close()
+
+
+if __name__ == '__main__':
+    process_user(sys.argv[1]) 
