@@ -17,14 +17,17 @@ import logging
 from concurrent import futures
 from futures import ThreadPoolExecutor
 import mylogging
+import contextlib
 
-THREADS = 6
+THREADS = 3
 STACKOVERFLOW_URL = 'http://stackoverflow.com'
 # Auxiliar functions
 
 def read_page(page):
-    response = urllib2.urlopen(page)
-    return response.read()
+    text = ''
+    with contextlib.closing(urllib2.urlopen(page)) as response:
+        text = response.read()
+    return text
 
 def user_data(url):
     soup = BeautifulSoup(read_page(url))
@@ -34,6 +37,7 @@ def user_data(url):
     address = ''
     if address_div:
         address = address_div[0]
+    soup.decompose()
     return {
         'href': url,
         'name': name,
@@ -52,6 +56,7 @@ def parse_answer_url(url):
         url = url[len(rem) + 1:]
         url = STACKOVERFLOW_URL + url[:-1]
         urls.append(url)
+    soup.decompose()
     return urls
 
 def parse_question_score(url):
@@ -60,20 +65,25 @@ def parse_question_score(url):
     votes = soup.find_all('span', {'class': 'vote-count-post'})
     td_owner = soup.find('td', {'class': 'owner'})
     if not td_owner:
+        soup.decompose()
         return
     details = td_owner.find('div', {'class', 'user-details'})
     time = td_owner.find('div', {'class', 'user-action-time'}).span['title']
     dt = datetime.strptime(time, '%Y-%m-%d %H:%M:%SZ')
    
     if not details.a:
+        soup.decompose()
         return
     questioner = user_data('{}/{}'.format(STACKOVERFLOW_URL, details.a['href']))
     if len(votes) < 2 or not questioner:
         return
+    question_votes = int(votes[0].contents[0])
+    answer_votes = int(votes[1].contents[0])
+    soup.decompose()
     return {
         'questioner': questioner,
-        'question_votes': int(votes[0].contents[0]),
-        'answer_votes': int(votes[1].contents[0]),
+        'question_votes': question_votes,
+        'answer_votes': answer_votes,
         'datetime': dt.strftime('%Y-%m-%dT%H:%M:%S')
     }	
 
@@ -104,18 +114,22 @@ def process_user(url):
             urls = parse_answer_url(answer_url)
             if len(urls) > 0:
                 logging.info('Adding page in thread pool: {}'.format(page))
-                futures.append(executor.submit(process_page, urls, page))
+                # futures.append(executor.submit(process_page, urls, page))
+                result['questions'].extend(process_page(urls, page))
             else:
                 break
             page += 1
-        
+        logging.info('All task have been added; pages={}'.format(page))
         for future in futures:
+            logging.info('w8 thread result')
             result['questions'].extend(future.result())
-        # use dumps for pretty printing
+        logging.info('all threads are finished')
+        #se dumps for pretty printing
         username = url.split('/')[-1]
         f = open('stackoverflow/{}.json'.format(username), 'w')
         f.write(json.dumps(result, indent=4))
         f.close()
+        logging.info('Success')
     except Exception as e:
         logging.error(e)
 
