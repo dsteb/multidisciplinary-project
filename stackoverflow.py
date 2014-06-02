@@ -14,8 +14,11 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 import threading
 import logging
+from concurrent import futures
+from futures import ThreadPoolExecutor
+import mylogging
 
-USE_THREADS = True
+THREADS = 6
 STACKOVERFLOW_URL = 'http://stackoverflow.com'
 # Auxiliar functions
 
@@ -75,18 +78,17 @@ def parse_question_score(url):
     }	
 
 
-lock = threading.Lock()
-def process_page(urls, questions):
+def process_page(urls, page):
     i = 0
     l = len(urls)
+    questions = []
     for url in urls:
         i += 1
-        logging.info('{}/{} {}'.format(i, l, url))
+        logging.info('page {}: {}/{} {}'.format(page, i, l, url))
         parsed_question = parse_question_score(url)
         if parsed_question:
-            lock.acquire()
             questions.append(parsed_question)
-            lock.release()
+    return questions
     
 def process_user(url):
     try: 
@@ -95,24 +97,20 @@ def process_user(url):
         result['answerer'] = user
         result['questions'] = []
         page = 1
-        threads = []
+        executor = ThreadPoolExecutor(max_workers=THREADS)
+        futures = []
         while True:
             answer_url = '{}?tab=answers&page={}'.format(url, page)
             urls = parse_answer_url(answer_url)
             if len(urls) > 0:
-                if USE_THREADS:
-                    logging.debug("Thread {} started for page {}".format(len(threads), page))
-                    t = threading.Thread(target=process_page, args=(urls, result['questions']))
-                    t.start()
-                    threads.append(t)
-                else:
-                    process_page(urls, result['questions'])
+                logging.info('Adding page in thread pool: {}'.format(page))
+                futures.append(executor.submit(process_page, urls, page))
             else:
                 break
             page += 1
-         
-        for t in threads:
-            t.join()
+        
+        for future in futures:
+            result['questions'].extend(future.result())
         # use dumps for pretty printing
         username = url.split('/')[-1]
         f = open('stackoverflow/{}.json'.format(username), 'w')
@@ -122,5 +120,5 @@ def process_user(url):
         logging.error(e)
 
 
-# if __name__ == '__main__':
-#     process_user(sys.argv[1])
+if __name__ == '__main__':
+    process_user(sys.argv[1])
