@@ -81,7 +81,7 @@ def parse_question_score(url):
     answer_votes = int(votes[1].contents[0])
     soup.decompose()
     return {
-        'questioner': questioner,
+        'questioner_reputation': questioner['reputation'],
         'question_votes': question_votes,
         'answer_votes': answer_votes,
         'datetime': dt.strftime('%Y-%m-%dT%H:%M:%S')
@@ -114,8 +114,8 @@ def process_user(url):
             urls = parse_answer_url(answer_url)
             if len(urls) > 0:
                 logging.info('Adding page in thread pool: {}'.format(page))
-                # futures.append(executor.submit(process_page, urls, page))
-                result['questions'].extend(process_page(urls, page))
+                futures.append(executor.submit(process_page, urls, page))
+                # result['questions'].extend(process_page(urls, page))
             else:
                 break
             page += 1
@@ -124,7 +124,7 @@ def process_user(url):
             logging.info('w8 thread result')
             result['questions'].extend(future.result())
         logging.info('all threads are finished')
-        #se dumps for pretty printing
+        # use dumps for pretty printing
         username = url.split('/')[-1]
         f = open('stackoverflow/{}.json'.format(username), 'w')
         f.write(json.dumps(result, indent=4))
@@ -134,5 +134,5 @@ def process_user(url):
         logging.error(e)
 
 
-if __name__ == '__main__':
-    process_user(sys.argv[1])
+#if __name__ == '__main__':
+#    process_user(sys.argv[1])
