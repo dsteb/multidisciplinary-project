@@ -23,7 +23,7 @@ def main():
             continue
         dt = datetime.strptime(question["datetime"], '%Y-%m-%dT%H:%M:%S')
         t = (calendar.timegm(dt.utctimetuple()) - DATE_2000) / 3600 / 24
-        qr = question["questioner"]["reputation"]
+        qr = question["questioner_reputation"]
         qs = question["question_votes"]
         as0 = question["answer_votes"]
         interest = pow(1+percent/100, t)
