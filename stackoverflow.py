@@ -19,7 +19,7 @@ from futures import ThreadPoolExecutor
 import mylogging
 import contextlib
 
-THREADS = 3
+THREADS = 10
 STACKOVERFLOW_URL = 'http://stackoverflow.com'
 # Auxiliar functions
 
