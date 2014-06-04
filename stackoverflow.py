@@ -114,8 +114,8 @@ def process_user(url):
             urls = parse_answer_url(answer_url)
             if len(urls) > 0:
                 logging.info('Adding page in thread pool: {}'.format(page))
-                # futures.append(executor.submit(process_page, urls, page))
-                result['questions'].extend(process_page(urls, page))
+                futures.append(executor.submit(process_page, urls, page))
+                # result['questions'].extend(process_page(urls, page))
             else:
                 break
             page += 1
