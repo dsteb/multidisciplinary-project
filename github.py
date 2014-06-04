@@ -19,17 +19,21 @@ import json
 from sets import Set
 from bs4 import BeautifulSoup
 import sys
+import os
+from concurrent import futures
+from futures import ThreadPoolExecutor
 
 # Auxiliar functions
 
+THREADS = 3
 GITHUB_URL = 'https://github.com'
 
 def read_page(page):
     response = urllib2.urlopen(page)
     return response.read()
 
-def process_user(username):
-    url = '{}/search?q={}&type=Users'.format(GITHUB_URL, username)
+def get_user(username):
+    url = u'{}/search?q={}&type=Users'.format(GITHUB_URL, username)
     text = read_page(url)
     soup = BeautifulSoup(text)
     user_info = soup.find(class_='user-list-info')
@@ -39,7 +43,7 @@ def process_user(username):
     return {'username': username, 'commits': commits}
 
 def process_days(username):
-    url = '{}/users/{}/contributions_calendar_data'.format(GITHUB_URL, username)
+    url = u'{}/users/{}/contributions_calendar_data'.format(GITHUB_URL, username)
     days = read_page(url)
     days = json.loads(days)
     results = []
@@ -50,8 +54,8 @@ def process_days(username):
     return results
 
 def parse_day(username, day):
-    print day
-    url = '{}/{}?tab=contributions&from={}'.format(GITHUB_URL, username, day)
+    print u"{}: day={}".format(username, day)
+    url = u'{}/{}?tab=contributions&from={}'.format(GITHUB_URL, username, day)
     text = read_page(url)
     soup = BeautifulSoup(text)
     header = soup.find(class_='conversation-list-heading')
@@ -59,12 +63,12 @@ def parse_day(username, day):
     if header.get_text().find('commits') != -1:
         ul = soup.find(class_='simple-conversation-list')
         for a in ul.find_all('a'):
-            results.extend(parse_repository(a['href']))
+            results.extend(parse_repository(username, a['href']))
     return results
 
 CACHE = Set()
 
-def parse_repository(url):
+def parse_repository(username, url):
     if url in CACHE:
         return []
     CACHE.add(url)
@@ -74,12 +78,12 @@ def parse_repository(url):
     commits = soup.find_all(class_='gobutton')
     results = []
     for a in commits:
-        data = parse_commit(a['href'])
+        data = parse_commit(username, a['href'])
         results.append(data)
     return results
 
-def parse_commit(url):
-    print url
+def parse_commit(username, url):
+    print u"{}: {}".format(username, url)
     url = GITHUB_URL + url
     text = read_page(url)
     soup = BeautifulSoup(text)
@@ -92,10 +96,24 @@ def parse_commit(url):
     utc = utc[:-6] # ignore timezone
     return {'commit': url, 'utc': utc, 'loc': loc}
 
-if __name__ == '__main__':
-    username = sys.argv[1]
-    result = process_user(username)
+def process_user(username): 
+    print u'creating thread for user: {}'.format(username)
+    result = get_user(username)
     f = open('github/{}.json'.format(username), 'w')
-    f.write(json.dumps(result))
-    f.close() 
-    # use dumps for pretty printing    
+    f.write(json.dumps(result, indent=4))
+    f.close()
+
+if __name__ == '__main__':
+    executor = ThreadPoolExecutor(max_workers=THREADS)
+    for subdirs, dirs, files in os.walk('stackoverflow/'):
+        for filename in files:
+            username = filename[:-5]
+            if os.path.isfile('github/{}'.format(filename)):
+                print u"skip {}".format(username)
+            else:
+                f = open('stackoverflow/{}'.format(filename), 'r')
+                data = json.load(f)
+                f.close()
+                username = data['answerer']['name'].replace(' ', '+')
+                print u"put in thread pool user '{}'".format(username)
+                executor.submit(process_user, username)
