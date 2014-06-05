@@ -22,24 +22,35 @@ import sys
 import os
 from concurrent import futures
 from futures import ThreadPoolExecutor
+import contextlib
+import codecs
 
 # Auxiliar functions
 
-THREADS = 3
+THREADS = 10
 GITHUB_URL = 'https://github.com'
 
 def read_page(page):
-    response = urllib2.urlopen(page)
-    return response.read()
+    text = ''
+    print page
+    with contextlib.closing(urllib2.urlopen(page)) as response:
+        text = response.read()
+    return text
 
 def get_user(username):
     url = u'{}/search?q={}&type=Users'.format(GITHUB_URL, username)
     text = read_page(url)
     soup = BeautifulSoup(text)
     user_info = soup.find(class_='user-list-info')
+    if not user_info:
+        soup.decompose()
+        return {'username': username, 'commits': []}
     a = user_info.find('a')
     username = a['href'][1:]
+    soup.decompose()
     commits = process_days(username)
+    if username in CACHE:
+        del CACHE[username]
     return {'username': username, 'commits': commits}
 
 def process_days(username):
@@ -59,26 +70,38 @@ def parse_day(username, day):
     text = read_page(url)
     soup = BeautifulSoup(text)
     header = soup.find(class_='conversation-list-heading')
-    results = []
+    urls = []
     if header.get_text().find('commits') != -1:
         ul = soup.find(class_='simple-conversation-list')
         for a in ul.find_all('a'):
-            results.extend(parse_repository(username, a['href']))
+            urls.append(a['href'])
+    soup.decompose()
+    results = []
+    for url in urls:
+        results.extend(parse_repository(username, url))
     return results
 
-CACHE = Set()
+CACHE = {}
 
 def parse_repository(username, url):
-    if url in CACHE:
+    user_cache = CACHE.get(username)
+    if not user_cache:
+        user_cache = Set()
+        CACHE[username] = user_cache
+    if url in user_cache:
         return []
-    CACHE.add(url)
+    user_cache.add(url)
     url = GITHUB_URL + url
     text = read_page(url)
     soup = BeautifulSoup(text)
     commits = soup.find_all(class_='gobutton')
-    results = []
+    urls = []
     for a in commits:
-        data = parse_commit(username, a['href'])
+        urls.append(a['href'])
+    soup.decompose()
+    results = []
+    for url in urls:
+        data = parse_commit(username, url)
         results.append(data)
     return results
 
@@ -94,6 +117,7 @@ def parse_commit(username, url):
     loc = int(loc)
     utc = soup.find('time')['datetime']
     utc = utc[:-6] # ignore timezone
+    soup.decompose()
     return {'commit': url, 'utc': utc, 'loc': loc}
 
 def process_user(username): 
@@ -111,9 +135,11 @@ if __name__ == '__main__':
             if os.path.isfile('github/{}'.format(filename)):
                 print u"skip {}".format(username)
             else:
-                f = open('stackoverflow/{}'.format(filename), 'r')
+                f = codecs.open('stackoverflow/{}'.format(filename), 'r', 'utf-8')
                 data = json.load(f)
                 f.close()
                 username = data['answerer']['name'].replace(' ', '+')
                 print u"put in thread pool user '{}'".format(username)
-                executor.submit(process_user, username)
+                # executor.submit(process_user, username)
+                process_user(username)
+    executor.shutdown(wait=True)
