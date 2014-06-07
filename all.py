@@ -18,7 +18,7 @@ URL = 'http://stackoverflow.com'
 USE_THREADS = False 
 
 if __name__ == '__main__':
-    page = sys.argv[1]
+    page = int(sys.argv[1])
     while True:
         url = '{}/users?tab=reputation&filter=all&page={}'.format(URL, page)
         print url
