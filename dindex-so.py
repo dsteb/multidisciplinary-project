@@ -4,15 +4,15 @@ import sys
 import json
 import calendar
 from datetime import datetime
+import os
 
-def main():
+def main(filename):
     DATE_2000 = 946684800
     percent = 7.5
-    filename = sys.argv[1]
     f = open(filename, 'r')
     json_data = json.load(f)
     answerer = json_data['answerer']
-    print json.dumps(answerer, indent=4)
+    # print json.dumps(answerer, indent=4)
     ar0 = answerer["reputation"]
     norm = 0
     num = 0
@@ -31,9 +31,12 @@ def main():
         norm += interest
         num += (qr + qs + as0)/(num/norm + 1.0)*interest
         
-        print t, qr, qs, ar0, as0, num, norm
+        #print t, qr, qs, ar0, as0, num, norm
         #print json.dumps(question, indent=4)
         
-    print num/norm
+    print "{} {} {}".format(filename, ar0, num/norm)
 if __name__ == '__main__':
-    main()
+#    main(sys.argv[1])
+    for subdirs, dirs, files in os.walk('stackoverflow/'):
+        for filename in files:
+           main('stackoverflow/' + filename) 

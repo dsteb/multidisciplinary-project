@@ -24,6 +24,7 @@ from concurrent import futures
 from futures import ThreadPoolExecutor
 import contextlib
 import codecs
+import httplib2
 
 # Auxiliar functions
 
@@ -37,21 +38,23 @@ def read_page(page):
         text = response.read()
     return text
 
-def get_user(username):
-    url = u'{}/search?q={}&type=Users'.format(GITHUB_URL, username)
+def get_user(username, fullname):
+    uri_param = httplib2.iri2uri(fullname.replace(' ', '+'))
+    url = u'{}/search?q={}&type=Users'.format(GITHUB_URL, uri_param)
     text = read_page(url)
     soup = BeautifulSoup(text)
     user_info = soup.find(class_='user-list-info')
     if not user_info:
         soup.decompose()
-        return {'username': username, 'commits': []}
+        return {'name': fullname, 'commits': []}
     a = user_info.find('a')
-    username = a['href'][1:]
+    github_username = a['href'][1:]
+    print "link stackoverflow '{}' to github '{}'".format(username, github_username)
     soup.decompose()
-    commits = process_days(username)
-    if username in CACHE:
-        del CACHE[username]
-    return {'username': username, 'commits': commits}
+    commits = process_days(github_username)
+    if github_username in CACHE:
+        del CACHE[github_username]
+    return {'name': github_username, 'commits': commits}
 
 def process_days(username):
     url = u'{}/users/{}/contributions_calendar_data'.format(GITHUB_URL, username)
@@ -120,9 +123,9 @@ def parse_commit(username, url):
     soup.decompose()
     return {'commit': url, 'utc': utc, 'loc': loc}
 
-def process_user(username): 
-    print u'creating thread for user: {}'.format(username)
-    result = get_user(username)
+def process_user(username, fullname): 
+    print u'creating thread for user; username={}; full name={}'.format(username, fullname)
+    result = get_user(username, fullname)
     f = open('github/{}.json'.format(username), 'w')
     f.write(json.dumps(result, indent=4))
     f.close()
@@ -132,14 +135,17 @@ if __name__ == '__main__':
     for subdirs, dirs, files in os.walk('stackoverflow/'):
         for filename in files:
             username = filename[:-5]
+            var =  'github/{}'.format(filename)
+            print var
+            print os.path.isfile(var)
             if os.path.isfile('github/{}'.format(filename)):
                 print u"skip {}".format(username)
             else:
                 f = codecs.open('stackoverflow/{}'.format(filename), 'r', 'utf-8')
                 data = json.load(f)
                 f.close()
-                username = data['answerer']['name'].replace(' ', '+')
+                fullname = data['answerer']['name']
                 print u"put in thread pool user '{}'".format(username)
                 # executor.submit(process_user, username)
-                process_user(username)
+                process_user(username, fullname)
     executor.shutdown(wait=True)
