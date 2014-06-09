@@ -135,7 +135,7 @@ if __name__ == '__main__':
     for subdirs, dirs, files in os.walk('stackoverflow/'):
         for filename in files:
             username = filename[:-5]
-            var =  'github/{}'.format(filename)
+            var =  'github/{}.csv'.format(username)
             print var
             print os.path.isfile(var)
             if os.path.isfile('github/{}'.format(filename)):
