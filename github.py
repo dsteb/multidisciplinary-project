@@ -25,6 +25,7 @@ from futures import ThreadPoolExecutor
 import contextlib
 import codecs
 import httplib2
+import csv
 
 # Auxiliar functions
 
@@ -33,12 +34,11 @@ GITHUB_URL = 'https://github.com'
 
 def read_page(page):
     text = ''
-    print page
     with contextlib.closing(urllib2.urlopen(page)) as response:
         text = response.read()
     return text
 
-def get_user(username, fullname):
+def process_user(username, fullname):
     uri_param = httplib2.iri2uri(fullname.replace(' ', '+'))
     url = u'{}/search?q={}&type=Users'.format(GITHUB_URL, uri_param)
     text = read_page(url)
@@ -51,23 +51,21 @@ def get_user(username, fullname):
     github_username = a['href'][1:]
     print "link stackoverflow '{}' to github '{}'".format(username, github_username)
     soup.decompose()
-    commits = process_days(github_username)
+    filename = 'github/{}.csv'.format(username)
+    commits = process_days(github_username, filename)
     if github_username in CACHE:
         del CACHE[github_username]
-    return {'name': github_username, 'commits': commits}
 
-def process_days(username):
+def process_days(username, filename):
     url = u'{}/users/{}/contributions_calendar_data'.format(GITHUB_URL, username)
     days = read_page(url)
     days = json.loads(days)
-    results = []
     for day in days:
         if day[1] != 0:
             dt = day[0].replace('/', '-')
-            results.extend(parse_day(username, dt))
-    return results
+            parse_day(username, dt, filename)
 
-def parse_day(username, day):
+def parse_day(username, day, filename):
     print u"{}: day={}".format(username, day)
     url = u'{}/{}?tab=contributions&from={}'.format(GITHUB_URL, username, day)
     text = read_page(url)
@@ -79,14 +77,12 @@ def parse_day(username, day):
         for a in ul.find_all('a'):
             urls.append(a['href'])
     soup.decompose()
-    results = []
     for url in urls:
-        results.extend(parse_repository(username, url))
-    return results
+        parse_repository(username, url, filename)
 
 CACHE = {}
 
-def parse_repository(username, url):
+def parse_repository(username, url, filename):
     user_cache = CACHE.get(username)
     if not user_cache:
         user_cache = Set()
@@ -106,7 +102,11 @@ def parse_repository(username, url):
     for url in urls:
         data = parse_commit(username, url)
         results.append(data)
-    return results
+    with contextlib.closing(open(filename, 'wb')) as csvfile:
+        writer = csv.writer(csvfile, delimiter='\t', quotechar='"', quoting=csv.QUOTE_ALL)
+        for commit in results:
+            writer.writerow(commit)
+        csvfile.close()
 
 def parse_commit(username, url):
     print u"{}: {}".format(username, url)
@@ -121,14 +121,14 @@ def parse_commit(username, url):
     utc = soup.find('time')['datetime']
     utc = utc[:-6] # ignore timezone
     soup.decompose()
-    return {'commit': url, 'utc': utc, 'loc': loc}
+    return [url, utc, loc]
 
-def process_user(username, fullname): 
-    print u'creating thread for user; username={}; full name={}'.format(username, fullname)
-    result = get_user(username, fullname)
-    f = open('github/{}.json'.format(username), 'w')
-    f.write(json.dumps(result, indent=4))
-    f.close()
+#def process_user(username, fullname): 
+#    print u'creating thread for user; username={}; full name={}'.format(username, fullname)
+#    result = get_user(username, fullname)
+#    f = open('github/{}.json'.format(username), 'w')
+#    f.write(json.dumps(result, indent=4))
+#    f.close()
 
 if __name__ == '__main__':
     executor = ThreadPoolExecutor(max_workers=THREADS)
@@ -146,6 +146,6 @@ if __name__ == '__main__':
                 f.close()
                 fullname = data['answerer']['name']
                 print u"put in thread pool user '{}'".format(username)
-                # executor.submit(process_user, username)
+                # executor.submit(process_user, username, fullname)
                 process_user(username, fullname)
     executor.shutdown(wait=True)
