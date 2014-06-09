@@ -30,7 +30,8 @@ import time
 
 # Auxiliar functions
 
-THREADS = 3
+THREADS = 10
+
 GITHUB_URL = 'https://github.com'
 
 def read_page(page):
@@ -46,20 +47,26 @@ def read_page(page):
     return text
 
 def process_user(username, fullname):
+    filename = 'github/{}.csv'.format(username)
+    filename_tmp = '{}.tmp'.format(filename)
+    with open(filename_tmp, 'a'):
+        os.utime(filename_tmp, None)
     uri_param = httplib2.iri2uri(fullname.replace(' ', '+'))
     url = u'{}/search?q={}&type=Users'.format(GITHUB_URL, uri_param)
     text = read_page(url)
     soup = BeautifulSoup(text)
     user_info = soup.find(class_='user-list-info')
     if not user_info:
+        os.rename(filename_tmp, filename)
         soup.decompose()
-        return {'name': fullname, 'commits': []}
+        return
     a = user_info.find('a')
     github_username = a['href'][1:]
+    with open(filename_tmp, 'w') as f:
+        f.write(github_username + '\n')
+        f.close()
     print "link stackoverflow '{}' to github '{}'".format(username, github_username)
     soup.decompose()
-    filename = 'github/{}.csv'.format(username)
-    filename_tmp = '{}.tmp'.format(filename)
     commits = process_days(github_username, filename_tmp)
     os.rename(filename_tmp, filename)
     if github_username in CACHE:
@@ -111,7 +118,7 @@ def parse_repository(username, url, filename):
     for url in urls:
         data = parse_commit(username, url)
         results.append(data)
-    with contextlib.closing(open(filename, 'wb')) as csvfile:
+    with contextlib.closing(open(filename, 'ab')) as csvfile:
         writer = csv.writer(csvfile, delimiter='\t', quotechar='"', quoting=csv.QUOTE_ALL)
         for commit in results:
             writer.writerow(commit)
