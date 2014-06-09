@@ -26,16 +26,23 @@ import contextlib
 import codecs
 import httplib2
 import csv
+import time
 
 # Auxiliar functions
 
-THREADS = 10
+THREADS = 3
 GITHUB_URL = 'https://github.com'
 
 def read_page(page):
     text = ''
-    with contextlib.closing(urllib2.urlopen(page)) as response:
-        text = response.read()
+    while True:
+        try:
+            with contextlib.closing(urllib2.urlopen(page)) as response:
+                text = response.read()
+            break
+        except Exception as e:
+            print "ERROR: ", e, page
+            time.sleep(5)
     return text
 
 def process_user(username, fullname):
@@ -52,7 +59,9 @@ def process_user(username, fullname):
     print "link stackoverflow '{}' to github '{}'".format(username, github_username)
     soup.decompose()
     filename = 'github/{}.csv'.format(username)
-    commits = process_days(github_username, filename)
+    filename_tmp = '{}.tmp'.format(filename)
+    commits = process_days(github_username, filename_tmp)
+    os.rename(filename_tmp, filename)
     if github_username in CACHE:
         del CACHE[github_username]
 
@@ -135,17 +144,17 @@ if __name__ == '__main__':
     for subdirs, dirs, files in os.walk('stackoverflow/'):
         for filename in files:
             username = filename[:-5]
-            var =  'github/{}.csv'.format(username)
-            print var
-            print os.path.isfile(var)
-            if os.path.isfile('github/{}'.format(filename)):
+            github_filename = 'github/{}.csv'.format(username)
+            if os.path.isfile('{}.tmp'.format(github_filename)):
+                os.remove('{}.tmp'.format(github_filename)) 
+            if os.path.isfile(github_filename):
                 print u"skip {}".format(username)
-            else:
-                f = codecs.open('stackoverflow/{}'.format(filename), 'r', 'utf-8')
-                data = json.load(f)
-                f.close()
-                fullname = data['answerer']['name']
-                print u"put in thread pool user '{}'".format(username)
-                # executor.submit(process_user, username, fullname)
-                process_user(username, fullname)
+                continue
+            f = codecs.open('stackoverflow/{}'.format(filename), 'r', 'utf-8')
+            data = json.load(f)
+            f.close()
+            fullname = data['answerer']['name']
+            print u"put in thread pool user '{}'".format(username)
+            executor.submit(process_user, username, fullname)
+            # process_user(username, fullname)
     executor.shutdown(wait=True)
