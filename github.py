@@ -147,8 +147,12 @@ def parse_commit(username, url):
 #    f.close()
 
 if __name__ == '__main__':
+    from guppy import hpy
+    h = hpy()
     executor = ThreadPoolExecutor(max_workers=THREADS)
+    thread = None
     for subdirs, dirs, files in os.walk('stackoverflow/'):
+        i = 0
         for filename in files:
             username = filename[:-5]
             github_filename = 'github/{}.csv'.format(username)
@@ -161,7 +165,16 @@ if __name__ == '__main__':
             data = json.load(f)
             f.close()
             fullname = data['answerer']['name']
+#            if i % (THREADS * 2) == 0:
+#                if thread:
+#                    thread.result()
+#                thread = executor.submit(process_user, username, fullname)
+#            else:  
+#                executor.submit(process_user, username, fullname)
             print u"put in thread pool user '{}'".format(username)
-            executor.submit(process_user, username, fullname)
-            # process_user(username, fullname)
+            
+            process_user(username, fullname)
+            i += 1
+            print h.heap()
+            sys.exit(0)
     executor.shutdown(wait=True)
