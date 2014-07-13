@@ -10,8 +10,6 @@ with open('users.csv') as input_file:
 		users[row[0]] = row[1]
 	input_file.close()
 
-LAST_ID = 23452338
-
 writer = csv.writer(sys.stdout, delimiter='	')
 for row in csv.reader(iter(sys.stdin.readline, ''), delimiter='	'):
 	answer_id = int(row[0])

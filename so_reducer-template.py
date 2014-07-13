@@ -5,6 +5,7 @@ import sys
 import calendar
 from datetime import datetime
 
+LAST_ID = 3600000
 DATE_2000 = 946684800
 
 '''
@@ -21,14 +22,15 @@ DATE_2000 = 946684800
 '''
 def dindex(user_answers):
 	### HERE YOUR OWN d-index implementation
-	result = 0.
-	MEAN = 4.0
+	max_value = 0
+	k = 1000.
 	for answer in user_answers:
 		score = answer['answer_score']
-		if score > 0:
-			value = 1000 * score / MEAN / answer['days_diff']
-			result += value
-	return result
+		dt = answer['days_diff']
+		value = k * score / dt
+		if value > max_value:
+			max_value = value
+	return max_value
 
 answers = []
 previous_user = -1
